@@ -1,88 +1,63 @@
 const express = require('express');
 const router = express.Router();
-const db = require('../config/database');
+const Product = require('../models/Product');
 const auth = require('../middleware/auth');
 
 // GET /api/products
-router.get('/', auth, (req, res) => {
+router.get('/', auth, async (req, res) => {
   const { search, category, page = 1, limit = 20 } = req.query;
-  let products = db.get('products').value();
+  const query = {};
+  if (search) query.$or = [{ name: new RegExp(search, 'i') }, { barcode: new RegExp(search, 'i') }];
+  if (category) query.category = category;
 
-  if (search) {
-    const s = search.toLowerCase();
-    products = products.filter(p => p.name.toLowerCase().includes(s) || p.barcode.includes(s));
-  }
-  if (category) products = products.filter(p => p.category === category);
-
-  const total = products.length;
-  const start = (page - 1) * limit;
-  const paginated = products.slice(start, start + parseInt(limit));
-
-  res.json({ success: true, data: paginated, total, page: parseInt(page), limit: parseInt(limit) });
+  try {
+    const total = await Product.countDocuments(query);
+    const products = await Product.find(query)
+      .skip((page - 1) * limit).limit(parseInt(limit)).sort({ createdAt: -1 });
+    res.json({ success: true, data: products, total, page: parseInt(page) });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 // GET /api/products/categories
-router.get('/categories', auth, (req, res) => {
-  const products = db.get('products').value();
-  const categories = [...new Set(products.map(p => p.category))];
-  res.json({ success: true, data: categories });
+router.get('/categories', auth, async (req, res) => {
+  try {
+    const categories = await Product.distinct('category');
+    res.json({ success: true, data: categories });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 // GET /api/products/:id
-router.get('/:id', auth, (req, res) => {
-  const product = db.get('products').find({ id: parseInt(req.params.id) }).value();
-  if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
-  res.json({ success: true, data: product });
+router.get('/:id', auth, async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.id);
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+    res.json({ success: true, data: product });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 // POST /api/products
-router.post('/', auth, (req, res) => {
-  const { name, category, price, stock, unit, barcode } = req.body;
-  if (!name || !category || !price) {
-    return res.status(400).json({ success: false, message: 'Name, category, and price are required' });
-  }
-
-  const nextIds = db.get('nextIds').value();
-  const newProduct = {
-    id: nextIds.product,
-    name, category,
-    price: parseFloat(price),
-    stock: parseInt(stock) || 0,
-    unit: unit || 'unit',
-    barcode: barcode || `P${String(nextIds.product).padStart(3, '0')}`,
-    createdAt: new Date().toISOString().split('T')[0]
-  };
-
-  db.get('products').push(newProduct).write();
-  db.set('nextIds.product', nextIds.product + 1).write();
-
-  res.status(201).json({ success: true, data: newProduct });
+router.post('/', auth, async (req, res) => {
+  try {
+    const product = await Product.create(req.body);
+    res.status(201).json({ success: true, data: product });
+  } catch (err) { res.status(400).json({ success: false, message: err.message }); }
 });
 
 // PUT /api/products/:id
-router.put('/:id', auth, (req, res) => {
-  const id = parseInt(req.params.id);
-  const product = db.get('products').find({ id }).value();
-  if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
-
-  const { name, category, price, stock, unit, barcode } = req.body;
-  db.get('products').find({ id }).assign({
-    name: name || product.name,
-    category: category || product.category,
-    price: price !== undefined ? parseFloat(price) : product.price,
-    stock: stock !== undefined ? parseInt(stock) : product.stock,
-    unit: unit || product.unit,
-    barcode: barcode || product.barcode,
-  }).write();
-
-  res.json({ success: true, data: db.get('products').find({ id }).value() });
+router.put('/:id', auth, async (req, res) => {
+  try {
+    const product = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    if (!product) return res.status(404).json({ success: false, message: 'Product not found' });
+    res.json({ success: true, data: product });
+  } catch (err) { res.status(400).json({ success: false, message: err.message }); }
 });
 
 // DELETE /api/products/:id
-router.delete('/:id', auth, (req, res) => {
-  const id = parseInt(req.params.id);
-  db.get('products').remove({ id }).write();
-  res.json({ success: true, message: 'Product deleted' });
+router.delete('/:id', auth, async (req, res) => {
+  try {
+    await Product.findByIdAndDelete(req.params.id);
+    res.json({ success: true, message: 'Product deleted' });
+  } catch (err) { res.status(500).json({ success: false, message: err.message }); }
 });
 
 module.exports = router;
