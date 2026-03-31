@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import API from '../utils/api';
 
 const AuthContext = createContext(null);
@@ -32,8 +32,28 @@ export const AuthProvider = ({ children }) => {
     setUser(null);
   };
 
+  // Role helpers
+  const isAdmin   = user?.role === 'admin';
+  const isManager = user?.role === 'manager' || isAdmin;
+  const isCashier = user?.role === 'cashier';
+
+  const can = (action) => {
+    switch (action) {
+      case 'view_dashboard':  return isAdmin || isManager;
+      case 'view_sales':      return true;
+      case 'create_sale':     return true;
+      case 'view_products':   return isAdmin || isManager;
+      case 'edit_products':   return isAdmin;
+      case 'view_customers':  return isAdmin || isManager;
+      case 'edit_customers':  return isAdmin || isManager;
+      case 'view_reports':    return isAdmin || isManager;
+      case 'manage_users':    return isAdmin;
+      default: return false;
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading }}>
+    <AuthContext.Provider value={{ user, login, logout, loading, isAdmin, isManager, isCashier, can }}>
       {children}
     </AuthContext.Provider>
   );

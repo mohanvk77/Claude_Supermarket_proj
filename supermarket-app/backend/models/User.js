@@ -8,14 +8,7 @@ const userSchema = new mongoose.Schema({
   role:     { type: String, default: 'admin' },
 }, { timestamps: true });
 
-// Hash password before saving
-userSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
-  this.password = await bcrypt.hash(this.password, 10);
-  next();
-});
-
-// Compare password method
+// Compare password method - plain comparison, no auto-hashing
 userSchema.methods.comparePassword = function (plain) {
   return bcrypt.compareSync(plain, this.password);
 };
