@@ -1,5 +1,6 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
+const bcrypt = require('bcryptjs');
 const User = require('./models/User');
 const Product = require('./models/Product');
 const Customer = require('./models/Customer');
@@ -22,11 +23,17 @@ const seedDatabase = async (standalone = false) => {
 
     console.log('🌱 Seeding database...');
 
-    // Create demo user
-    await User.create({ username: 'demo', password: 'demo', name: 'Demo User', role: 'admin' });
-    console.log('✅ User created');
+    // Create 3 users with different roles
+    await User.insertMany([
+      { username: 'admin',   password: bcrypt.hashSync('admin123', 10),   name: 'Admin User',   role: 'admin'   },
+      { username: 'manager', password: bcrypt.hashSync('manager123', 10), name: 'Store Manager', role: 'manager' },
+      { username: 'cashier', password: bcrypt.hashSync('cashier123', 10), name: 'Cashier',       role: 'cashier' },
+      // Keep demo as admin for backward compat
+      { username: 'demo',    password: bcrypt.hashSync('demo', 10),       name: 'Demo User',    role: 'admin'   },
+    ]);
+    console.log('✅ Users created (admin, manager, cashier, demo)');
 
-    // Create products
+    // Products
     const products = await Product.insertMany([
       { name: 'Basmati Rice 5kg',     category: 'Grains',        price: 450, stock: 120, unit: 'bag',    barcode: 'P001' },
       { name: 'Sunflower Oil 1L',     category: 'Oils',          price: 185, stock: 85,  unit: 'bottle', barcode: 'P002' },
@@ -43,7 +50,7 @@ const seedDatabase = async (standalone = false) => {
     ]);
     console.log('✅ Products created:', products.length);
 
-    // Create customers
+    // Customers
     const customers = await Customer.insertMany([
       { name: 'Rajesh Kumar', phone: '9876543210', email: 'rajesh@email.com', address: 'Chennai'   },
       { name: 'Priya Sharma', phone: '9876543211', email: 'priya@email.com',  address: 'Mumbai'    },
@@ -53,7 +60,7 @@ const seedDatabase = async (standalone = false) => {
     ]);
     console.log('✅ Customers created:', customers.length);
 
-    // Generate 90 days of clean sales data
+    // Sales
     const paymentMethods = ['Cash', 'UPI', 'Card', 'Credit'];
     const salesData = [];
     let invoiceCount = 1;
@@ -74,31 +81,19 @@ const seedDatabase = async (standalone = false) => {
           const qty = Math.floor(Math.random() * 5) + 1;
           const amount = product.price * qty;
           subtotal += amount;
-          items.push({
-            productId:   product._id,
-            productName: product.name,
-            category:    product.category,
-            price:       product.price,
-            qty,
-            amount
-          });
+          items.push({ productId: product._id, productName: product.name, category: product.category, price: product.price, qty, amount });
         }
 
-        const customer  = customers[Math.floor(Math.random() * customers.length)];
-        const discount  = Math.random() > 0.7 ? Math.round(subtotal * 0.05) : 0;
-        const total     = subtotal - discount;
+        const customer = customers[Math.floor(Math.random() * customers.length)];
+        const discount = Math.random() > 0.7 ? Math.round(subtotal * 0.05) : 0;
+        const total = subtotal - discount;
 
         salesData.push({
-          invoiceNo:    `INV-${String(invoiceCount++).padStart(5, '0')}`,
-          customerId:   customer._id,
-          customerName: customer.name,
-          items,
-          subtotal,
-          discount,
-          total,
+          invoiceNo: `INV-${String(invoiceCount++).padStart(5, '0')}`,
+          customerId: customer._id, customerName: customer.name,
+          items, subtotal, discount, total,
           paymentMethod: paymentMethods[Math.floor(Math.random() * paymentMethods.length)],
-          date:          dateStr,
-          createdAt:     date,
+          date: dateStr, createdAt: date,
         });
       }
     }
@@ -106,7 +101,6 @@ const seedDatabase = async (standalone = false) => {
     await Sale.insertMany(salesData);
     console.log('✅ Sales created:', salesData.length);
     console.log('🎉 Database seeded successfully!');
-
     if (standalone) process.exit(0);
 
   } catch (error) {
@@ -115,9 +109,5 @@ const seedDatabase = async (standalone = false) => {
   }
 };
 
-// If run directly: node seed.js
-if (require.main === module) {
-  seedDatabase(true);
-} else {
-  module.exports = seedDatabase;
-}
+if (require.main === module) seedDatabase(true);
+else module.exports = seedDatabase;

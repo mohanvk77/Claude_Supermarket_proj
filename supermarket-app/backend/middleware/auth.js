@@ -4,9 +4,8 @@ const authMiddleware = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1];
 
-  if (!token) {
+  if (!token)
     return res.status(401).json({ success: false, message: 'Access token required' });
-  }
 
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -17,4 +16,14 @@ const authMiddleware = (req, res, next) => {
   }
 };
 
+// Role-based access control middleware
+const requireRole = (...roles) => (req, res, next) => {
+  if (!req.user)
+    return res.status(401).json({ success: false, message: 'Not authenticated' });
+  if (!roles.includes(req.user.role))
+    return res.status(403).json({ success: false, message: `Access denied. Required role: ${roles.join(' or ')}` });
+  next();
+};
+
 module.exports = authMiddleware;
+module.exports.requireRole = requireRole;
